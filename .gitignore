@@ -1,0 +1,57 @@
+# General
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+*.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Node.js / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.next/
+out/
+.vercel/
+
+# MalRag Specific
+malrag_index/
+malrag_cache_*/
+malrag.log
+lightrag.log
+backend/temp_uploads/
+dickens/
+dickens_gemini/
+malayalam_demo/
+reproduce/
+local_neo4jWorkDir/
+neo4jWorkDir/
+
+# Ignore test artifacts
+tests/__pycache__/

@@ -1,0 +1,25 @@
+fastapi
+uvicorn
+python-multipart
+# textract removed due to pip issues
+pypdf
+python-docx
+python-dotenv
+aiohttp
+tenacity
+numpy
+pydantic
+tiktoken
+nest_asyncio
+google-generativeai
+jq
+# Dependencies required by malrag/llm.py and malrag/storage.py
+aioboto3
+ollama
+torch
+openai
+networkx
+tqdm
+transformers
+graspologic
+nano-vectordb

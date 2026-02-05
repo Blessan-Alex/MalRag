@@ -1,0 +1,11 @@
+Kochi Metro Quarterly Financial Report – Q3 2025
+
+Revenue and Expenses Overview:
+Department        Revenue (INR Lakhs)    Expenses (INR Lakhs)
+Operations        450                    320
+Maintenance       120                    150
+HR & Admin        80                     60
+Marketing         50                     45
+Total             700                    575
+
+The revenue increase is attributed to higher ticket sales, metro card recharges, and advertising revenue at stations. Expenses reflect ongoing maintenance, energy costs, and staff salaries. The finance department recommends optimizing energy consumption by upgrading to LED lighting and installing regenerative braking systems in trains to reduce operating costs further. Strategic budgeting and careful monitoring of operational costs will help ensure financial sustainability.
