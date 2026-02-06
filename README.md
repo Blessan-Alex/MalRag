@@ -89,34 +89,25 @@ kmrl-app/
 
 ## 🚀 Getting Started
 
-### Prerequisites
-- Python 3.9+
-- Node.js 18+
-- PostgreSQL
-- Redis
-- Docker (optional)
+For a comprehensive, beginner-friendly guide on how to install and run the project, please refer to [SETUP.md](setup.md).
 
-### Backend Setup
-```bash
-cd backend
-pip install -r requirements.txt
+### Quick Summary
 
-# Start services
-python -m backend.app.main
-```
+1.  **Backend**:
+    ```bash
+    cd backend
+    python -m venv venv
+    # Windows: .\venv\Scripts\Activate | Mac/Linux: source venv/bin/activate
+    pip install -r requirements.txt
+    python -m backend.app.main
+    ```
 
-### Frontend Setup
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-### Quick Start with Docker
-```bash
-# Start all services
-docker-compose up -d
-```
+2.  **Frontend**:
+    ```bash
+    cd frontend
+    npm install
+    npm run dev
+    ```
 
 ---
 

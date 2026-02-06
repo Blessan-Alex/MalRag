@@ -69,9 +69,9 @@ const items = [
 
 // Remove dummy data - now using dynamic hooks
 
-export function AppSidebar() {
+export function AppSidebar({ documents: propDocuments = [] }) {
     const { isMobile } = useSidebar();
-    
+
     // Use dynamic hooks instead of static state
     const {
         chats,
@@ -81,32 +81,27 @@ export function AppSidebar() {
         updateChatWithMessage,
         deleteChat
     } = useChats();
-    
+
     const [selectedDocuments, setSelectedDocuments] = useState([]);
 
     function handleNewChat() {
         createNewChat("New Chat");
     }
-    
 
-    // Document checklist data
-    const documents = [
-        { id: "financial_invoice_traction_motor", name: "Financial Invoice - Traction Motor", category: "Financial" },
-        { id: "incident_report_emergency_brake", name: "Incident Report - Emergency Brake", category: "Safety" },
-        { id: "incident_report_signal_failure", name: "Incident Report - Signal Failure", category: "Safety" },
-        { id: "maintenance_checklist_weekly_inspection", name: "Maintenance Checklist - Weekly", category: "Maintenance" },
-        { id: "maintenance_checklist_malayalam", name: "Maintenance Checklist (Malayalam)", category: "Maintenance" },
-        { id: "maintenance_schedule_monthly", name: "Maintenance Schedule - Monthly", category: "Maintenance" },
-        { id: "incident_report_malayalam", name: "Incident Report (Malayalam)", category: "Safety" },
-        { id: "regulatory_directive_safety", name: "Regulatory Directive - Safety", category: "Regulatory" },
-        { id: "financial_budget_quarterly", name: "Financial Budget - Quarterly", category: "Financial" },
-        { id: "engineering_blueprint_schematic", name: "Engineering Blueprint", category: "Engineering" },
-        { id: "dataset_summary", name: "Dataset Summary", category: "Documentation" }
+
+    // Use prop documents if available, map to display format
+    const documents = propDocuments.length > 0 ? propDocuments.map(d => ({
+        id: d.id,
+        name: d.filename,
+        category: d.status === 'indexed' ? 'Indexed' : 'Processing'
+    })) : [
+        // Fallback for demo if no docs loaded yet
+        { id: "loading", name: "No documents loaded", category: "System" }
     ];
 
     const handleDocumentSelect = (docId) => {
-        setSelectedDocuments(prev => 
-            prev.includes(docId) 
+        setSelectedDocuments(prev =>
+            prev.includes(docId)
                 ? prev.filter(id => id !== docId)
                 : [...prev, docId]
         );
@@ -157,11 +152,10 @@ export function AppSidebar() {
                                                     <SidebarMenuButton asChild className="flex-1 min-w-0">
                                                         <button
                                                             type="button"
-                                                            className={`w-full text-left p-2 rounded-lg transition-colors min-w-0 ${
-                                                                chat.id === activeChatId
+                                                            className={`w-full text-left p-2 rounded-lg transition-colors min-w-0 ${chat.id === activeChatId
                                                                     ? "bg-accent text-accent-foreground"
                                                                     : "hover:bg-muted"
-                                                            }`}
+                                                                }`}
                                                             onClick={() =>
                                                                 setActiveChatId(chat.id)
                                                             }
@@ -191,7 +185,7 @@ export function AppSidebar() {
                         )}
                     </SidebarGroupContent>
                 </SidebarGroup>
-                
+
                 <SidebarGroup className="flex-1 min-h-0">
                     <SidebarGroupLabel>Documents</SidebarGroupLabel>
                     <SidebarGroupContent className="flex-1 min-h-0 flex flex-col">
@@ -219,8 +213,8 @@ export function AppSidebar() {
                                                 <div className="text-xs font-medium truncate">
                                                     {doc.name}
                                                 </div>
-                                                <Badge 
-                                                    variant="outline" 
+                                                <Badge
+                                                    variant="outline"
                                                     className={`text-xs px-1 py-0 ${getCategoryColor(doc.category)}`}
                                                 >
                                                     {doc.category}

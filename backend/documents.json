@@ -1,0 +1,17 @@
+[
+  {
+    "id": "seed-id-001",
+    "filename": "mal.txt",
+    "doc_id": "doc-seed-mal",
+    "uploaded_at": "2026-02-06 05:00:00.000000",
+    "status": "indexed",
+    "updated_at": "2026-02-06 11:52:39.487067"
+  },
+  {
+    "id": "1d87e015-3420-4ad8-ad4f-9c1b289b710e",
+    "filename": "incident12.pdf",
+    "doc_id": null,
+    "uploaded_at": "2026-02-06 11:24:59.846814",
+    "status": "indexed"
+  }
+]

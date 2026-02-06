@@ -1108,9 +1108,10 @@ class MultiModel:
         return await next_model.gen_func(**args)
 
 
-if __name__ == "__main__":
-    import asyncio
+import asyncio
+import itertools
 
+if __name__ == "__main__":
     async def main():
         result = await gpt_4o_mini_complete("How are you?")
         print(result)
@@ -1122,41 +1123,85 @@ import os
 import numpy as np
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
+class GeminiKeyManager:
+    def __init__(self):
+        keys_str = os.getenv("GOOGLE_API_KEYS")
+        if keys_str:
+            self.keys = [k.strip() for k in keys_str.split(",") if k.strip()]
+        else:
+            single_key = os.getenv("GOOGLE_API_KEY")
+            if single_key:
+                self.keys = [single_key]
+            else:
+                self.keys = []
+        
+        if not self.keys:
+            logger.warning("No GOOGLE_API_KEYS or GOOGLE_API_KEY found.")
+        
+        # Use a cycle iterator for round-robin/rotation
+        self.key_cycle = itertools.cycle(self.keys)
+        self.current_key = next(self.key_cycle) if self.keys else None
+
+    def get_current_key(self):
+        return self.current_key
+
+    def rotate_key(self):
+        if self.keys:
+            new_key = next(self.key_cycle)
+            # Ensure we actually rotated to a different key if multiple exist
+            if len(self.keys) > 1 and new_key == self.current_key:
+                 new_key = next(self.key_cycle)
+            self.current_key = new_key
+            logger.info(f"Rotated Gemini API Key. New key ends with ...{self.current_key[-4:] if self.current_key else 'None'}")
+            return self.current_key
+        return None
+
+gemini_key_manager = GeminiKeyManager()
+
+
 @retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=4, max=10),
+    stop=stop_after_attempt(5), # Increased attempts to allow for rotation
+    wait=wait_exponential(multiplier=1, min=1, max=10),
     retry=retry_if_exception_type(Exception),
 )
 async def gemini_complete(
     prompt, system_prompt=None, history_messages=[], **kwargs
 ) -> str:
-    api_key = os.getenv("GOOGLE_API_KEY")
+    api_key = gemini_key_manager.get_current_key()
     if not api_key:
-        raise ValueError("GOOGLE_API_KEY environment variable not set")
+        raise ValueError("GOOGLE_API_KEYS/GOOGLE_API_KEY environment variable not set or valid")
     
-    genai.configure(api_key=api_key)
-    model_name = kwargs.get("model", "gemini-2.5-flash")
-    model = genai.GenerativeModel(model_name)
+    try:
+        genai.configure(api_key=api_key)
+        model_name = kwargs.get("model", "gemini-2.5-flash")
+        model = genai.GenerativeModel(model_name)
 
-    gemini_history = []
-    for msg in history_messages:
-        role = "user" if msg["role"] == "user" else "model"
-        gemini_history.append({"role": role, "parts": [msg["content"]]})
+        gemini_history = []
+        for msg in history_messages:
+            role = "user" if msg["role"] == "user" else "model"
+            gemini_history.append({"role": role, "parts": [msg["content"]]})
+            
+        chat = model.start_chat(history=gemini_history)
         
-    chat = model.start_chat(history=gemini_history)
-    
-    if system_prompt:
-         # simple prepend strategy for now as chat session is initiated
-         prompt = f"System: {system_prompt}\nUser: {prompt}"
+        if system_prompt:
+             # simple prepend strategy for now as chat session is initiated
+             prompt = f"System: {system_prompt}\nUser: {prompt}"
 
-    response = await chat.send_message_async(prompt)
-    
-    return response.text
+        logger.info(f"[LLM] Calling Gemini API (Model: {model_name}, Key: ...{api_key[-4:]})")
+        response = await chat.send_message_async(prompt)
+        logger.info(f"[LLM] Gemini Response received (Length: {len(response.text)} chars)")
+        return response.text
+    except Exception as e:
+        logger.warning(f"[LLM] Gemini API Failed (Key: ...{api_key[-4:]}). Error: {e}")
+        logger.warning(f"[LLM] Rotating key and retrying...")
+        gemini_key_manager.rotate_key()
+        raise e # Re-raise to trigger tenacity retry with new key
+
 
 @wrap_embedding_func_with_attrs(embedding_dim=768, max_token_size=2048)
 @retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=4, max=10),
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
     retry=retry_if_exception_type(Exception),
 )
 async def gemini_embedding(
@@ -1167,20 +1212,28 @@ async def gemini_embedding(
     if api_key:
         genai.configure(api_key=api_key)
     else:
-        api_key = os.getenv("GOOGLE_API_KEY")
+        api_key = gemini_key_manager.get_current_key()
         if not api_key:
-            raise ValueError("GOOGLE_API_KEY environment variable not set")
-            
-    genai.configure(api_key=api_key)
+             raise ValueError("GOOGLE_API_KEYS/GOOGLE_API_KEY environment variable not set")
+        genai.configure(api_key=api_key)
     
-    # Batch embedding
-    result = genai.embed_content(
-        model=model,
-        content=texts,
-        task_type="retrieval_document",
-        title=None
-    )
-    return np.array(result['embedding'])
+    try:
+        # Batch embedding
+        result = genai.embed_content(
+            model=model,
+            content=texts,
+            task_type="retrieval_document",
+            title=None
+        )
+        return np.array(result['embedding'])
+    except Exception as e:
+        logger.error(f"Gemini Embedding API Error with key ...{api_key[-4:] if api_key else 'None'}: {e}")
+        if not api_key: # If passed specifically, we probably shouldn't rotate global keys, but for consistency if using global manager:
+             gemini_key_manager.rotate_key()
+        else:
+             gemini_key_manager.rotate_key()
+        raise e
+
 
 @lru_cache(maxsize=1)
 def initialize_sentence_transformer(model_name):

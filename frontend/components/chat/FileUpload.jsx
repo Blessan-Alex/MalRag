@@ -52,7 +52,7 @@ export const FileUpload = ({ onUploadComplete }) => {
                         setJobStatus(data.data);
                         if (data.data.status === "completed") {
                             clearInterval(pollInterval.current);
-                            onUploadComplete(file.name);
+                            if (onUploadComplete) onUploadComplete(file.name);
                         }
                         if (data.data.status === "failed") {
                             clearInterval(pollInterval.current);
@@ -65,7 +65,7 @@ export const FileUpload = ({ onUploadComplete }) => {
         }
 
         return () => clearInterval(pollInterval.current);
-    }, [jobId, jobStatus?.status]);
+    }, [jobId, jobStatus?.status, onUploadComplete, file]);
 
     if (jobId) {
         return (
@@ -76,6 +76,13 @@ export const FileUpload = ({ onUploadComplete }) => {
                 </div>
                 <Timeline status={jobStatus?.status} step={jobStatus?.step} progress={jobStatus?.progress} />
                 <p className="text-xs text-gray-500 mt-2">{jobStatus?.message}</p>
+
+                {jobStatus?.status === 'completed' && (
+                    <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded text-center">
+                        <p className="text-green-700 text-sm font-medium">Successfully added your document!</p>
+                        <p className="text-green-600 text-xs mt-1">You can now begin chatting with {file.name}</p>
+                    </div>
+                )}
             </div>
         )
     }

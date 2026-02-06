@@ -15,6 +15,7 @@ class QueryRequest(BaseModel):
 class Response(BaseModel):
     status: str
     data: Optional[str] = None
+    sources: Optional[list] = []
     message: Optional[str] = None
 
 @router.post("/query", response_model=Response)
@@ -31,7 +32,29 @@ async def query_endpoint(request: QueryRequest):
                 ),
             ),
         )
-        return Response(status="success", data=result)
+        print(f"DEBUG: rag.query result keys: {result.keys() if isinstance(result, dict) else 'Not a dict'}") # Debugging log
+        
+        answer = result
+        sources = []
+        
+        if isinstance(result, dict):
+            answer = result.get("response", "")
+            sources = result.get("context_data", [])
+            
+        if not answer or answer == "":
+             print("WARNING: rag.query returned empty answer")
+             
+        # Normalize source objects if needed (e.g., ensure 'source_id' or 'id')
+        formatted_sources = []
+        seen = set()
+        for s in sources:
+            # We use 'id' or 'full_doc_id' as a unique key if possible
+            sid = s.get("id") or s.get("full_doc_id")
+            if sid and sid not in seen:
+                formatted_sources.append(s)
+                seen.add(sid)
+                
+        return Response(status="success", data=answer, sources=formatted_sources)
     except Exception as e:
         import traceback
         traceback.print_exc()

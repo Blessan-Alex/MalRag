@@ -89,6 +89,13 @@ class ApiService {
     }
 
     /**
+     * Get available documents
+     */
+    async getDocuments() {
+        return this.request('/api/v1/ingest/documents');
+    }
+
+    /**
      * Check if the backend is healthy
      * @returns {Promise<Object>} Health status
      */

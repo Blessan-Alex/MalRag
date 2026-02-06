@@ -31,3 +31,17 @@ google-generativeai
 pillow
 sentence-transformers
 python-dotenv
+
+# Web Framework & API
+fastapi
+uvicorn
+python-multipart
+
+# Document Processing
+pypdf
+python-docx
+
+# Vector Database
+chromadb
+pydantic
+tqdm

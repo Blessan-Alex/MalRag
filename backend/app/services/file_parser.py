@@ -29,11 +29,18 @@ async def parse_file_content(file_path: str, original_filename: str) -> str:
 
         elif ext == '.docx':
             try:
+                try:
+                    import docx
+                except ImportError:
+                    logger.error("python-docx not installed.")
+                    raise ValueError("Server configuration error: python-docx not installed")
+
                 doc = docx.Document(file_path)
                 text = "\n".join([para.text for para in doc.paragraphs])
+                logger.info(f"DOCX parsing successful. Extracted {len(text)} characters.")
             except Exception as e:
-                logger.error(f"DOCX parsing error: {e}")
-                raise ValueError("Invalid DOCX file")
+                logger.error(f"DOCX parsing error: {str(e)}", exc_info=True)
+                raise ValueError(f"Invalid DOCX file: {str(e)}")
             return text
             
         elif ext in ['.txt', '.md', '.csv', '.json']:

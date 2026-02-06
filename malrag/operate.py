@@ -466,11 +466,18 @@ async def kg_query(
     # Handle cache
     use_model_func = global_config["llm_model_func"]
     args_hash = compute_args_hash(query_param.mode, query)
+    
+    logger.info(f"KG Query: '{query}' (Mode: {query_param.mode})")
+    
     cached_response, quantized, min_val, max_val = await handle_cache(
         hashing_kv, args_hash, query, query_param.mode
     )
     if cached_response is not None:
-        return cached_response
+        logger.info("Cache hit for KG Query.")
+        return {
+            "response": cached_response,
+            "context_data": []
+        }
 
     example_number = global_config["addon_params"].get("example_number", None)
     if example_number and example_number < len(PROMPTS["keywords_extraction_examples"]):
@@ -489,11 +496,12 @@ async def kg_query(
         return PROMPTS["fail_response"]
 
     # LLM generate keywords
+    logger.info(f"[Query] Generating keywords for query: '{query}'")
     kw_prompt_temp = PROMPTS["keywords_extraction"]
     kw_prompt = kw_prompt_temp.format(query=query, examples=examples, language=language)
     result = await use_model_func(kw_prompt, keyword_extraction=True)
-    logger.info("kw_prompt result:")
-    print(result)
+    logger.info(f"[Query] Keyword generation raw result: {result}")
+    
     try:
         # json_text = locate_json_string_body_from_string(result) # handled in use_model_func
         match = re.search(r"\{.*\}", result, re.DOTALL)
@@ -503,31 +511,33 @@ async def kg_query(
 
             hl_keywords = keywords_data.get("high_level_keywords", [])
             ll_keywords = keywords_data.get("low_level_keywords", [])
+            logger.info(f"[Query] Extracted Keywords - High: {hl_keywords}, Low: {ll_keywords}")
         else:
-            logger.error("No JSON-like structure found in the result.")
+            logger.error("[Query] No JSON-like structure found in the keyword result.")
             return PROMPTS["fail_response"]
 
     # Handle parsing error
     except json.JSONDecodeError as e:
-        print(f"JSON parsing error: {e} {result}")
+        logger.error(f"[Query] JSON parsing error: {e} {result}")
         return PROMPTS["fail_response"]
 
     # Handdle keywords missing
     if hl_keywords == [] and ll_keywords == []:
-        logger.warning("low_level_keywords and high_level_keywords is empty")
+        logger.warning("[Query] Both low_level_keywords and high_level_keywords are empty")
         return PROMPTS["fail_response"]
     if ll_keywords == [] and query_param.mode in ["local", "hybrid"]:
-        logger.warning("low_level_keywords is empty")
+        logger.warning("[Query] low_level_keywords is empty")
         return PROMPTS["fail_response"]
     else:
         ll_keywords = ", ".join(ll_keywords)
     if hl_keywords == [] and query_param.mode in ["global", "hybrid"]:
-        logger.warning("high_level_keywords is empty")
+        logger.warning("[Query] high_level_keywords is empty")
         return PROMPTS["fail_response"]
     else:
         hl_keywords = ", ".join(hl_keywords)
 
     # Build context
+    logger.info("[Query] Retrieving context from Knowledge Graph and Vector DB...")
     keywords = [ll_keywords, hl_keywords]
     context = await _build_query_context(
         keywords,
@@ -537,6 +547,10 @@ async def kg_query(
         text_chunks_db,
         query_param,
     )
+    
+    # context is a dictionary or string depending on implementation, log size if possible
+    context_size = len(str(context)) if context else 0
+    logger.info(f"[Query] Context retrieved (Size: {context_size} chars).")
 
     if query_param.only_need_context:
         return context
@@ -548,11 +562,15 @@ async def kg_query(
     )
     if query_param.only_need_prompt:
         return sys_prompt
+        
+    logger.info(f"[Query] Sending final prompt to LLM (Query: '{query}')...")
     response = await use_model_func(
         query,
         system_prompt=sys_prompt,
         stream=query_param.stream,
     )
+    logger.info("[Query] LLM response received successfully.")
+    
     if isinstance(response, str) and len(response) > len(sys_prompt):
         response = (
             response.replace(sys_prompt, "")
@@ -577,7 +595,17 @@ async def kg_query(
             mode=query_param.mode,
         ),
     )
-    return response
+    # Return both response and context if requested, or just response to maintain compat if not handled upstream
+    # However, since we control upstream, we can return a dict or object.
+    # But to be safe with existing calls we might want to attach it to the string or change return type.
+    # Let's change return type to dict if upstream can handle it.
+    # Check malrag.py: it just returns the result. Wrapper api expects string or object.
+    
+    # Actually, let's return a dict with response and context data
+    return {
+        "response": response,
+        "context_data": context[1] if isinstance(context, tuple) else []
+    }
 
 
 async def _build_query_context(
@@ -592,6 +620,11 @@ async def _build_query_context(
     # hl_entities_context, hl_relations_context, hl_text_units_context = "", "", ""
 
     ll_kewwords, hl_keywrds = query[0], query[1]
+    
+    # Initialize lists for text units
+    ll_text_units_list = []
+    hl_text_units_list = []
+
     if query_param.mode in ["local", "hybrid"]:
         if ll_kewwords == "":
             ll_entities_context, ll_relations_context, ll_text_units_context = (
@@ -608,6 +641,7 @@ async def _build_query_context(
                 ll_entities_context,
                 ll_relations_context,
                 ll_text_units_context,
+                ll_text_units_list
             ) = await _get_node_data(
                 ll_kewwords,
                 knowledge_graph_inst,
@@ -631,6 +665,7 @@ async def _build_query_context(
                 hl_entities_context,
                 hl_relations_context,
                 hl_text_units_context,
+                hl_text_units_list
             ) = await _get_edge_data(
                 hl_keywrds,
                 knowledge_graph_inst,
@@ -645,6 +680,19 @@ async def _build_query_context(
             ):
                 logger.warn("No high level context found. Switching to local mode.")
                 query_param.mode = "local"
+                
+    # Combine sources lists
+    combined_text_units_list = []
+    seen_ids = set()
+    for unit in ll_text_units_list + hl_text_units_list:
+        # Assuming unit has 'id' or we use its content/source_id hash
+        # unit is a dict from TextChunkSchema
+        # We need a unique identifier. 'id' is added in _find_related...
+        unit_id = unit.get("id")
+        if unit_id and unit_id not in seen_ids:
+            combined_text_units_list.append(unit)
+            seen_ids.add(unit_id)
+
     if query_param.mode == "hybrid":
         entities_context, relations_context, text_units_context = combine_contexts(
             [hl_entities_context, ll_entities_context],
@@ -663,7 +711,8 @@ async def _build_query_context(
             hl_relations_context,
             hl_text_units_context,
         )
-    return f"""
+        
+    context_string = f"""
 -----Entities-----
 ```csv
 {entities_context}
@@ -677,6 +726,7 @@ async def _build_query_context(
 {text_units_context}
 ```
 """
+    return context_string, combined_text_units_list
 
 
 async def _get_node_data(
@@ -689,7 +739,7 @@ async def _get_node_data(
     # get similar entities
     results = await entities_vdb.query(query, top_k=query_param.top_k)
     if not len(results):
-        return "", "", ""
+        return "", "", "", []
     # get entity information
     node_datas = await asyncio.gather(
         *[knowledge_graph_inst.get_node(r["entity_name"]) for r in results]
@@ -753,7 +803,7 @@ async def _get_node_data(
     for i, t in enumerate(use_text_units):
         text_units_section_list.append([i, t["content"]])
     text_units_context = list_of_list_to_csv(text_units_section_list)
-    return entities_context, relations_context, text_units_context
+    return entities_context, relations_context, text_units_context, use_text_units
 
 
 async def _find_most_related_text_unit_from_entities(
@@ -880,7 +930,7 @@ async def _get_edge_data(
     results = await relationships_vdb.query(keywords, top_k=query_param.top_k)
 
     if not len(results):
-        return "", "", ""
+        return "", "", "", []
 
     edge_datas = await asyncio.gather(
         *[knowledge_graph_inst.get_edge(r["src_id"], r["tgt_id"]) for r in results]
@@ -949,7 +999,7 @@ async def _get_edge_data(
     for i, t in enumerate(use_text_units):
         text_units_section_list.append([i, t["content"]])
     text_units_context = list_of_list_to_csv(text_units_section_list)
-    return entities_context, relations_context, text_units_context
+    return entities_context, relations_context, text_units_context, use_text_units
 
 
 async def _find_most_related_entities_from_relationships(
@@ -1069,12 +1119,27 @@ async def naive_query(
     # Handle cache
     use_model_func = global_config["llm_model_func"]
     args_hash = compute_args_hash(query_param.mode, query)
+    logger.info(f"Received query: '{query}' (Mode: {query_param.mode})")
+    
+    # Check cache first
     cached_response, quantized, min_val, max_val = await handle_cache(
         hashing_kv, args_hash, query, query_param.mode
     )
     if cached_response is not None:
-        return cached_response
+        logger.info("Cache hit! Returning cached response.")
+        return {
+            "response": cached_response,
+            "context_data": [] # Cache needs update to store sources too, but for now empty
+        }
 
+    logger.info("Extracting keywords for query...")
+    ll_kewwords = await extract_keywords(
+        query,
+        global_config=global_config,
+        max_keywords=query_param.max_keywords_per_query,
+        mode="low",
+    )
+    logger.info(f"Extracted keywords: {ll_kewwords}")
     results = await chunks_vdb.query(query, top_k=query_param.top_k)
     if not len(results):
         return PROMPTS["fail_response"]
@@ -1115,10 +1180,12 @@ async def naive_query(
     if query_param.only_need_prompt:
         return sys_prompt
 
+    logger.info("Context built. Sending to LLM...")
     response = await use_model_func(
         query,
         system_prompt=sys_prompt,
     )
+    logger.info("LLM response received.")
 
     if len(response) > len(sys_prompt):
         response = (

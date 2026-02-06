@@ -8,11 +8,13 @@ import apiService from "@/lib/api";
 import { useChat } from "@/hooks/useChat";
 import { useChats } from "@/hooks/useChats";
 import { Button } from "@/components/ui/button";
-import { Send, Loader2, Trash2, Mic, Train, AlertTriangle, Wrench } from "lucide-react";
+import { Send, Loader2, Trash2, Mic, Train, AlertTriangle, Wrench, Paperclip } from "lucide-react";
+import { FileUpload } from "@/components/chat/FileUpload";
 
 export default function ChatPage() {
     const [inputValue, setInputValue] = useState("");
     const [isRecording, setIsRecording] = useState(false);
+    const [showUpload, setShowUpload] = useState(false);
 
     // Audio recording refs
     const mediaRecorderRef = useRef(null);
@@ -21,11 +23,14 @@ export default function ChatPage() {
     const {
         messages,
         isLoading,
+        loadingStatus,
         error,
         sendMessage,
         clearMessages,
         loadDepartments,
-        checkBackendHealth
+        checkBackendHealth,
+        loadDocuments,
+        documents
     } = useChat();
 
     const {
@@ -34,11 +39,12 @@ export default function ChatPage() {
         getActiveChat
     } = useChats();
 
-    // Load departments and check health on mount
+    // Load departments, documents and check health on mount
     useEffect(() => {
         loadDepartments();
+        loadDocuments();
         checkBackendHealth();
-    }, [loadDepartments, checkBackendHealth]);
+    }, [loadDepartments, loadDocuments, checkBackendHealth]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -121,6 +127,15 @@ export default function ChatPage() {
         }
     };
 
+    const handleUploadComplete = (filename) => {
+        // Refresh documents list
+        loadDocuments();
+
+        // Optional: Close uploader after a delay or keep open for user to see success message
+        // For now, we keep it open so they see the success message
+        // setShowUpload(false); 
+    };
+
 
     const MessageBubble = ({ message }) => {
         const isUser = message.type === 'user';
@@ -151,23 +166,20 @@ export default function ChatPage() {
             // Add first source as a clickable link at the end of the content
             if (sources && sources.length > 0) {
                 const firstSource = sources[0];
-                // Map document IDs to actual filenames
-                const documentMap = {
-                    'financial_invoice_traction_motor': 'fin13.pdf',
-                    'incident_report_emergency_brake': 'incident12.pdf',
-                    'incident_report_signal_failure': 'incident12.pdf',
-                    'maintenance_checklist_weekly_inspection': 'maintenance11.pdf',
-                    'maintenance_checklist_malayalam': 'mal1.docx',
-                    'maintenance_schedule_monthly': 'inspect6.docx',
-                    'incident_report_malayalam': 'mal2.docx',
-                    'regulatory_directive_safety': 'regulatory15.pdf',
-                    'financial_budget_quarterly': 'fin8.docx',
-                    'engineering_blueprint_schematic': 'img1.png',
-                    'dataset_summary': 'op1.txt'
-                };
+                let filename = `${firstSource.document_id}.pdf`;
 
-                const filename = documentMap[firstSource.document_id] || `${firstSource.document_id}.pdf`;
-                const sourceLink = `<div class="mt-3 pt-2 border-t border-gray-200"><a href="/documents/${filename}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors"><span>📄</span><span>Source: ${firstSource.document_id}</span></a></div>`;
+                // Try to find filename from documents list if available
+                if (firstSource.full_doc_id && documents.length > 0) {
+                    const doc = documents.find(d => d.doc_id === firstSource.full_doc_id);
+                    if (doc) filename = doc.filename;
+                } else if (firstSource.document_id) {
+                    // Fallback: try to match by ID or just show ID
+                    // Note: malrag currently returns 'full_doc_id' which matches our 'doc_id'
+                    const doc = documents.find(d => d.doc_id === firstSource.full_doc_id || d.id === firstSource.full_doc_id);
+                    if (doc) filename = doc.filename;
+                }
+
+                const sourceLink = `<div class="mt-3 pt-2 border-t border-gray-200"><a href="/documents/${filename}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors"><span>📄</span><span>Source: ${filename}</span></a></div>`;
                 formattedContent += sourceLink;
             }
 
@@ -202,22 +214,11 @@ export default function ChatPage() {
                                 </summary>
                                 <div className="mt-3 space-y-2">
                                     {message.context.slice(1, 6).map((doc, idx) => {
-                                        // Map document IDs to actual filenames
-                                        const documentMap = {
-                                            'financial_invoice_traction_motor': 'fin13.pdf',
-                                            'incident_report_emergency_brake': 'incident12.pdf',
-                                            'incident_report_signal_failure': 'incident12.pdf',
-                                            'maintenance_checklist_weekly_inspection': 'maintenance11.pdf',
-                                            'maintenance_checklist_malayalam': 'mal1.docx',
-                                            'maintenance_schedule_monthly': 'inspect6.docx',
-                                            'incident_report_malayalam': 'mal2.docx',
-                                            'regulatory_directive_safety': 'regulatory15.pdf',
-                                            'financial_budget_quarterly': 'fin8.docx',
-                                            'engineering_blueprint_schematic': 'img1.png',
-                                            'dataset_summary': 'op1.txt'
-                                        };
-
-                                        const filename = documentMap[doc.document_id] || `${doc.document_id}.pdf`;
+                                        let filename = `${doc.document_id}.pdf`;
+                                        if (doc.full_doc_id) {
+                                            const d = documents.find(x => x.doc_id === doc.full_doc_id);
+                                            if (d) filename = d.filename;
+                                        }
 
                                         return (
                                             <div key={idx + 1} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
@@ -229,11 +230,13 @@ export default function ChatPage() {
                                                         className="font-medium text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1 transition-colors"
                                                     >
                                                         <span>📄</span>
-                                                        <span>Source: {doc.document_id}</span>
+                                                        <span>Source: {filename}</span>
                                                     </a>
-                                                    <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
-                                                        {doc.similarity_score?.toFixed(3)}
-                                                    </span>
+                                                    {doc.similarity_score && (
+                                                        <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
+                                                            {doc.similarity_score?.toFixed(3)}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 {doc.department && (
                                                     <div className="text-xs text-gray-600 mt-1">
@@ -264,7 +267,7 @@ export default function ChatPage() {
 
     return (
         <SidebarProvider>
-            <AppSidebar />
+            <AppSidebar documents={documents} />
             <SidebarTrigger />
             <div className="h-screen w-full flex flex-col items-center justify-between min-h-0 overflow-hidden">
                 {/* Header with clear button */}
@@ -360,7 +363,7 @@ export default function ChatPage() {
                             <div className="flex justify-start mb-4">
                                 <div className="bg-muted rounded-lg p-3 text-sm flex items-center">
                                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                    AI is thinking...
+                                    {loadingStatus || "AI is thinking..."}
                                 </div>
                             </div>
                         )}
@@ -386,9 +389,38 @@ export default function ChatPage() {
                     </div>
                 )}
 
+                {/* File Upload Area */}
+                {showUpload && (
+                    <div className="w-full px-4 md:px-12 py-2">
+                        <div className="bg-white border rounded-lg p-3 shadow-sm relative">
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                className="absolute top-2 right-2 h-6 w-6 p-0"
+                                onClick={() => setShowUpload(false)}
+                            >
+                                <span className="sr-only">Close</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-x h-4 w-4"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                            </Button>
+                            <FileUpload onUploadComplete={handleUploadComplete} />
+                        </div>
+                    </div>
+                )}
+
                 {/* Input form */}
                 <div className="w-full px-4 md:px-12 py-4 border-t">
                     <div className="flex items-center gap-2">
+                        {/* Upload Button */}
+                        <Button
+                            type="button"
+                            onClick={() => setShowUpload(!showUpload)}
+                            variant={showUpload ? "secondary" : "outline"}
+                            size="sm"
+                            className="hover:bg-gray-100"
+                        >
+                            <Paperclip className="h-4 w-4" />
+                        </Button>
+
                         {/* Microphone button */}
                         <Button
                             type="button"
