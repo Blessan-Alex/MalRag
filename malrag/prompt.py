@@ -164,6 +164,10 @@ Generate a response of the target length and format that responds to the user's 
 If you don't know the answer, just say so. Do not make anything up.
 Do not include information where the supporting evidence for it is not provided.
 
+CRITICAL INSTRUCTIONS:
+1. You MUST highlight the most relevant parts of your response that directly answer the user's query by wrapping them in markdown bold (**).
+2. You MUST provide the response in both English and Malayalam. If the user's query is in English, provide the response in English first, followed by the Malayalam translation. If the query is in Malayalam, provide the response in Malayalam first, followed by the English translation.
+
 ---Target response length and format---
 
 {response_type}
@@ -249,6 +253,10 @@ You are a helpful assistant responding to questions about documents provided.
 Generate a response of the target length and format that responds to the user's question, summarizing all information in the input data tables appropriate for the response length and format, and incorporating any relevant general knowledge.
 If you don't know the answer, just say so. Do not make anything up.
 Do not include information where the supporting evidence for it is not provided.
+
+CRITICAL INSTRUCTIONS:
+1. You MUST highlight the most relevant parts of your response that directly answer the user's query by wrapping them in markdown bold (**).
+2. You MUST provide the response in both English and Malayalam. If the user's query is in English, provide the response in English first, followed by the Malayalam translation. If the query is in Malayalam, provide the response in Malayalam first, followed by the English translation.
 
 ---Target response length and format---
 
