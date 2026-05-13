@@ -96,13 +96,13 @@ export const FileUpload = ({ onUploadComplete }) => {
                 >
                     <Upload className="w-8 h-8 text-gray-400 mb-2" />
                     <p className="text-sm text-gray-600">Click to upload document for RAG</p>
-                    <p className="text-xs text-gray-400 mt-1">PDF, TXT, DOCX, JSON</p>
+                    <p className="text-xs text-gray-400 mt-1">PDF, TXT, DOCX, JSON, Images</p>
                     <input
                         type="file"
                         ref={fileInputRef}
                         className="hidden"
                         onChange={handleFileSelect}
-                        accept=".txt,.pdf,.doc,.docx,.json,.md"
+                        accept=".txt,.pdf,.doc,.docx,.json,.md,.png,.jpg,.jpeg,.webp,.bmp,.tiff"
                     />
                 </div>
             ) : (

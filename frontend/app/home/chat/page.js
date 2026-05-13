@@ -94,6 +94,11 @@ export default function ChatPage() {
         recognition.onerror = (event) => {
             console.error("Speech recognition error:", event.error);
             setIsRecording(false);
+            if (event.error === "network") {
+                alert("Speech recognition requires an internet connection. Please check your network and try again.");
+            } else if (event.error === "not-allowed") {
+                alert("Microphone access was denied. Please allow microphone access in your browser settings.");
+            }
         };
 
         recognition.onend = () => {
