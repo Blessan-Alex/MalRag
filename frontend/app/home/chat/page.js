@@ -4,7 +4,7 @@ import { AppSidebar } from "@/components/appsidebar";
 import { useEffect, useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import apiService from "@/lib/api";
+
 import { useChat } from "@/hooks/useChat";
 import { useChats } from "@/hooks/useChats";
 import { Button } from "@/components/ui/button";
@@ -15,10 +15,10 @@ export default function ChatPage() {
     const [inputValue, setInputValue] = useState("");
     const [isRecording, setIsRecording] = useState(false);
     const [showUpload, setShowUpload] = useState(false);
+    const [speechLang, setSpeechLang] = useState("en-US");
 
-    // Audio recording refs
-    const mediaRecorderRef = useRef(null);
-    const audioChunksRef = useRef([]);
+    // Speech recognition ref
+    const recognitionRef = useRef(null);
 
     const {
         messages,
@@ -61,70 +61,47 @@ export default function ChatPage() {
         await sendMessage(message);
     };
 
-    // Send audio message with transcription using Backend
-    const sendAudioMessage = async (audioBlob) => {
-        try {
-            const data = await apiService.transcribeAudio(audioBlob);
-            const transcription = data.text || "Transcription failed";
-
-            // Update chat with the transcribed message
-            if (activeChatId) {
-                updateChatWithMessage(activeChatId, transcription);
-            }
-
-            await sendMessage(transcription);
-        } catch (err) {
-            console.error('Audio processing failed:', err);
-
-            if (activeChatId) {
-                updateChatWithMessage(activeChatId, "Audio message (processing failed)");
-            }
-            await sendMessage("Audio message (processing failed)");
-        }
-    };
-
-    // Toggle recording
-    const toggleRecording = async () => {
+    // Toggle speech recognition using Web Speech API
+    const toggleRecording = () => {
         if (isRecording) {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-                mediaRecorderRef.current.stop();
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
             }
             setIsRecording(false);
             return;
         }
 
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: true,
-            });
-            audioChunksRef.current = [];
-
-            const mediaRecorder = new MediaRecorder(stream, {
-                mimeType: "audio/webm;codecs=opus",
-            });
-            mediaRecorderRef.current = mediaRecorder;
-
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    audioChunksRef.current.push(event.data);
-                }
-            };
-
-            mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunksRef.current, {
-                    type: "audio/webm;codecs=opus",
-                });
-                audioChunksRef.current = [];
-                sendAudioMessage(audioBlob);
-                stream.getTracks().forEach((track) => track.stop()); // release mic
-            };
-
-            mediaRecorder.start();
-            setIsRecording(true);
-        } catch (err) {
-            console.error("Mic access denied:", err);
-            setIsRecording(false);
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            alert("Speech recognition is not supported in this browser. Please use Chrome or Edge.");
+            return;
         }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = speechLang;
+        recognition.interimResults = true;
+        recognition.continuous = true;
+        recognitionRef.current = recognition;
+
+        recognition.onresult = (event) => {
+            let transcript = "";
+            for (let i = 0; i < event.results.length; i++) {
+                transcript += event.results[i][0].transcript;
+            }
+            setInputValue(transcript);
+        };
+
+        recognition.onerror = (event) => {
+            console.error("Speech recognition error:", event.error);
+            setIsRecording(false);
+        };
+
+        recognition.onend = () => {
+            setIsRecording(false);
+        };
+
+        recognition.start();
+        setIsRecording(true);
     };
 
     const handleUploadComplete = (filename) => {
@@ -373,9 +350,9 @@ export default function ChatPage() {
                 {/* Recording indicator */}
                 {isRecording && (
                     <div className="w-full px-4 md:px-12 py-2">
-                        <div className="bg-red-100 border border-red-200 rounded-lg p-3 text-red-800 text-sm flex items-center gap-2">
-                            <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
-                            <span>Recording... Click the microphone again to stop</span>
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-800 text-sm flex items-center gap-2">
+                            <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+                            <span>Listening... Speak now. Click mic to stop.</span>
                         </div>
                     </div>
                 )}
@@ -420,6 +397,20 @@ export default function ChatPage() {
                         >
                             <Paperclip className="h-4 w-4" />
                         </Button>
+
+                        {/* Language selector for speech */}
+                        <select
+                            value={speechLang}
+                            onChange={(e) => setSpeechLang(e.target.value)}
+                            className="h-9 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                            title="Speech language"
+                        >
+                            <option value="en-US">EN</option>
+                            <option value="ml-IN">ML</option>
+                            <option value="hi-IN">HI</option>
+                            <option value="ta-IN">TA</option>
+                            <option value="ar-SA">AR</option>
+                        </select>
 
                         {/* Microphone button */}
                         <Button
